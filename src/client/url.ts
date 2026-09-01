@@ -1,6 +1,6 @@
 export interface Role {
   role: 'host' | 'player';
-  playerID?: string;
+  playerID: string;
   matchID: string;
 }
 
@@ -11,13 +11,11 @@ export function parseRoleFromUrl(search: string): Role {
     throw new Error('Missing required "match" query parameter.');
   }
 
-  if (params.get('role') === 'player') {
-    const playerID = params.get('playerID');
-    if (!playerID) {
-      throw new Error('Player mode requires a "playerID" query parameter.');
-    }
-    return { role: 'player', playerID, matchID };
+  const playerID = params.get('playerID');
+  if (!playerID) {
+    throw new Error('Missing required "playerID" query parameter.');
   }
 
-  return { role: 'host', matchID };
+  const role = params.get('role') === 'player' ? 'player' : 'host';
+  return { role, playerID, matchID };
 }

@@ -16,7 +16,11 @@ async function fetchRefereeScore(cardId: string, response: string): Promise<Refe
   return res.json();
 }
 
-export function HostBoard({ G, moves }: Pick<BoardProps<GameState>, 'G' | 'moves' | 'ctx'>) {
+export function HostBoard({
+  G,
+  moves,
+  playerID,
+}: Pick<BoardProps<GameState>, 'G' | 'moves' | 'ctx' | 'playerID'>) {
   const [manualScore, setManualScore] = useState('');
   const [resolving, setResolving] = useState(false);
 
@@ -61,10 +65,11 @@ export function HostBoard({ G, moves }: Pick<BoardProps<GameState>, 'G' | 'moves
         <h2>Leaderboard</h2>
         <ul>
           {Object.entries(G.scores)
+            .filter(([id]) => id !== playerID)
             .sort((a, b) => b[1] - a[1])
-            .map(([playerID, score]) => (
-              <li key={playerID}>
-                Player {playerID}: {score}
+            .map(([id, score]) => (
+              <li key={id}>
+                Player {id}: {score}
               </li>
             ))}
         </ul>

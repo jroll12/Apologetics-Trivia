@@ -18,6 +18,4 @@ const GameClient = Client({
 });
 
 const root = createRoot(document.getElementById('root')!);
-root.render(
-  <GameClient matchID={matchID} playerID={role === 'player' ? playerID : undefined} />
-);
+root.render(<GameClient matchID={matchID} playerID={playerID} />);

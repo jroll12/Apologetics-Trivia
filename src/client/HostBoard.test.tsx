@@ -1,4 +1,5 @@
 /** @jest-environment jsdom */
+/// <reference types="@testing-library/jest-dom" />
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { HostBoard } from './HostBoard';
@@ -25,7 +26,7 @@ describe('HostBoard', () => {
 
   it('shows a Draw Card button when there is no current card', () => {
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
-    render(<HostBoard G={baseG()} moves={moves as any} ctx={{} as any} />);
+    render(<HostBoard G={baseG()} moves={moves as any} ctx={{} as any} playerID="2" />);
 
     fireEvent.click(screen.getByText('Draw Card'));
     expect(moves.drawCard).toHaveBeenCalled();
@@ -41,6 +42,7 @@ describe('HostBoard', () => {
         G={baseG({ currentCard: quickDrawCard, responses: { '0': String(quickDrawCard.correctChoiceIndex) } })}
         moves={moves as any}
         ctx={{} as any}
+        playerID="2"
       />
     );
 
@@ -65,6 +67,7 @@ describe('HostBoard', () => {
         G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
         moves={moves as any}
         ctx={{} as any}
+        playerID="2"
       />
     );
 
@@ -88,6 +91,7 @@ describe('HostBoard', () => {
         G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
         moves={moves as any}
         ctx={{} as any}
+        playerID="2"
       />
     );
 
@@ -98,5 +102,21 @@ describe('HostBoard', () => {
     expect(moves.resolveRound).toHaveBeenCalledWith([
       { playerID: '1', score: 6, tip: 'Scored by host (AI referee unavailable).' },
     ]);
+  });
+
+  it('does not show the host itself as a leaderboard entry', () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    render(
+      <HostBoard
+        G={baseG({ scores: { '0': 5, '1': 3, '2': 0 } })}
+        moves={moves as any}
+        ctx={{} as any}
+        playerID="2"
+      />
+    );
+
+    expect(screen.getByText('Player 0: 5')).toBeInTheDocument();
+    expect(screen.getByText('Player 1: 3')).toBeInTheDocument();
+    expect(screen.queryByText('Player 2: 0')).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,13 @@
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:8000';
 
 async function main() {
-  const numPlayers = Number(process.argv[2]) || 4;
+  // The CLI argument means "number of phone players" — the host is a
+  // separate, reserved playerID on top of that (see task-9-report.md, "Fix
+  // round 1"), so boardgame.io's numPlayers is phonePlayerCount + 1.
+  const phonePlayerCount = Number(process.argv[2]) || 4;
+  const numPlayers = phonePlayerCount + 1;
+  const hostPlayerID = String(phonePlayerCount);
+
   const res = await fetch(`${SERVER_URL}/games/apologetics/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -13,9 +19,11 @@ async function main() {
   }
 
   const { matchID } = (await res.json()) as { matchID: string };
-  console.log(`Match created for ${numPlayers} players.`);
-  console.log(`Host screen: http://localhost:5173/?match=${matchID}`);
-  for (let i = 0; i < numPlayers; i++) {
+  console.log(`Match created for ${phonePlayerCount} players.`);
+  console.log(
+    `Host screen: http://localhost:5173/?match=${matchID}&role=host&playerID=${hostPlayerID}`
+  );
+  for (let i = 0; i < phonePlayerCount; i++) {
     console.log(`Player ${i}: http://localhost:5173/?match=${matchID}&role=player&playerID=${i}`);
   }
 }
