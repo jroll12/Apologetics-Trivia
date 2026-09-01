@@ -47,24 +47,6 @@ export function createServer() {
     }
   });
 
-  // boardgame.io's `Server()` only wires `router.routes()` onto `app` inside
-  // `.run()` (via its internal `configureRouter`/`configureApp`). Since this
-  // function deliberately does NOT call `.run()` — so callers (like our
-  // tests) can drive `server.app.callback()` without binding a real port —
-  // we have to mount the router ourselves or `/referee/score` is never
-  // reachable. This mirrors what boardgame.io's `configureApp` does.
-  //
-  // When the real server IS started via `.run()` (see `require.main` below),
-  // boardgame.io mounts `router.routes()` a second time internally. That's
-  // harmless here: every handler on this router (ours and boardgame.io's
-  // lobby routes) is a single-argument `async (ctx) => {...}` that never
-  // calls `next()`, so per koa-compose semantics a matched request is fully
-  // handled by whichever mount matches first and never reaches the second
-  // one. Only unmatched paths pay a redundant (harmless) second pass through
-  // the cors/api-secret middleware `.run()` adds. If this version of
-  // boardgame.io changes that assumption, route handlers could double-fire.
-  server.app.use(server.router.routes()).use(server.router.allowedMethods());
-
   return server;
 }
 

@@ -1,3 +1,4 @@
+import type { Server as HttpServer } from 'http';
 import request from 'supertest';
 import { createServer } from './index';
 import * as refereeService from '../referee/refereeService';
@@ -6,8 +7,28 @@ import { STARTER_DECK } from '../game/cards';
 jest.mock('../referee/refereeService');
 
 describe('POST /referee/score', () => {
-  const server = createServer();
-  const app = server.app.callback();
+  let server: ReturnType<typeof createServer>;
+  let servers: { apiServer?: HttpServer; appServer: HttpServer };
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    server = createServer();
+    // Bind to an OS-assigned ephemeral port (the standard Node.js pattern for
+    // test servers) rather than driving `server.app.callback()` directly.
+    // boardgame.io only wires cors()/the API-secret check/its own lobby
+    // routes onto the app from inside `run()`, so exercising the route
+    // without actually calling `run()` would bypass that middleware entirely.
+    servers = await server.run(0);
+    const address = servers.appServer.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error(`Expected appServer to be listening on a port, got: ${JSON.stringify(address)}`);
+    }
+    baseUrl = `http://localhost:${address.port}`;
+  });
+
+  afterAll(() => {
+    server.kill(servers);
+  });
 
   afterEach(() => jest.resetAllMocks());
 
@@ -18,7 +39,7 @@ describe('POST /referee/score', () => {
     });
 
     const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
-    const res = await request(app)
+    const res = await request(baseUrl)
       .post('/referee/score')
       .send({ cardId: comebackCard.id, response: 'my answer' });
 
@@ -31,7 +52,7 @@ describe('POST /referee/score', () => {
   });
 
   it('returns 400 for an unknown card id', async () => {
-    const res = await request(app)
+    const res = await request(baseUrl)
       .post('/referee/score')
       .send({ cardId: 'not-a-real-card', response: 'my answer' });
 
@@ -44,7 +65,7 @@ describe('POST /referee/score', () => {
     );
 
     const steelmanCard = STARTER_DECK.find((c) => c.type === 'STEELMAN')!;
-    const res = await request(app)
+    const res = await request(baseUrl)
       .post('/referee/score')
       .send({ cardId: steelmanCard.id, response: 'x' });
 
