@@ -32,9 +32,10 @@ export async function scoreResponse(
 ): Promise<RefereeResult> {
   const { system, user } = buildRefereePrompt(card, playerResponse);
 
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new RefereeTimeoutError('Referee call timed out')), REFEREE_TIMEOUT_MS)
-  );
+  let timerId: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timerId = setTimeout(() => reject(new RefereeTimeoutError('Referee call timed out')), REFEREE_TIMEOUT_MS);
+  });
 
   const apiCall = client.messages.create({
     model: REFEREE_MODEL,
@@ -45,9 +46,14 @@ export async function scoreResponse(
     tool_choice: { type: 'tool', name: 'submit_score' },
   });
 
-  const response = await Promise.race([apiCall, timeout]);
+  let response: Anthropic.Message;
+  try {
+    response = await Promise.race([apiCall, timeout]);
+  } finally {
+    clearTimeout(timerId!);
+  }
 
-  const toolUse = (response as Anthropic.Message).content.find(
+  const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
   );
 
