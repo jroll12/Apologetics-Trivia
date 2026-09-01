@@ -11,5 +11,13 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["src", "scripts"]
+  "include": ["src", "scripts"],
+  // src/client/index.tsx is the Vite/browser entry point and uses
+  // `import.meta`, which TypeScript only allows under an ES-module-style
+  // `module` target. This project's `module` is CommonJS because ts-node
+  // (dev:server, scripts/create-match.ts) and ts-jest both need CommonJS
+  // output. Vite/esbuild bundles that file natively regardless of this
+  // tsconfig, so it's excluded here and type-checked separately via
+  // `tsconfig.client.json` (see `npx tsc --noEmit -p tsconfig.client.json`).
+  "exclude": ["src/client/index.tsx"]
 }
