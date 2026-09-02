@@ -79,5 +79,22 @@ export const ApologeticsGame: Game<GameState> = {
       G.lastRoundResult = results;
       G.currentCard = null;
     },
+
+    // Resets the SAME match back to its just-started state so the host can
+    // play again with the same players and links, without redealing a new
+    // match. `G.deck` is left untouched — it's always the same STARTER_DECK
+    // reference — and the existing `G.scores` keys are reused rather than
+    // recomputed from ctx, since they already reflect this match's real
+    // players.
+    resetGame: ({ G }) => {
+      G.deckIndex = -1;
+      G.currentCard = null;
+      G.responses = {};
+      G.claimedBy = null;
+      G.lastRoundResult = null;
+      for (const playerID of Object.keys(G.scores)) {
+        G.scores[playerID] = 0;
+      }
+    },
   },
 };

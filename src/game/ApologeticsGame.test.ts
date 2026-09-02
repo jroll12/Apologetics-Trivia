@@ -128,4 +128,24 @@ describe('ApologeticsGame', () => {
     expect(after.deckIndex).toBe(STARTER_DECK.length - 1);
     expect(after.currentCard).toBeNull();
   });
+
+  it('resetGame resets scores and round state back to the initial state, keeping the same players', () => {
+    const { client0 } = makeClients('reset-test');
+    client0.moves.drawCard();
+    client0.moves.resolveRound([{ playerID: '0', score: 10, tip: 'Correct!' }]);
+
+    const before = client0.getState()!.G as GameState;
+    expect(before.scores['0']).toBeGreaterThan(0);
+    expect(before.deckIndex).toBeGreaterThanOrEqual(0);
+
+    client0.moves.resetGame();
+
+    const after = client0.getState()!.G as GameState;
+    expect(after.scores).toEqual({ '0': 0, '1': 0 });
+    expect(after.deckIndex).toBe(-1);
+    expect(after.currentCard).toBeNull();
+    expect(after.responses).toEqual({});
+    expect(after.claimedBy).toBeNull();
+    expect(after.lastRoundResult).toBeNull();
+  });
 });

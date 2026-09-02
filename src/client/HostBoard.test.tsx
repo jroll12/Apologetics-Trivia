@@ -332,7 +332,7 @@ describe('HostBoard — round resolved / leaderboard', () => {
 
 describe('HostBoard — game over', () => {
   it('shows a winner spotlight and runner-up list once the deck is exhausted', () => {
-    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn(), resetGame: jest.fn() };
     renderHost(
       baseG({
         deckIndex: STARTER_DECK.length - 1,
@@ -348,5 +348,25 @@ describe('HostBoard — game over', () => {
     const runnerUpRow = screen.getByText('Player 1').closest('li')!;
     expect(runnerUpRow).toHaveTextContent('12');
     expect(screen.queryByText('Draw Card')).not.toBeInTheDocument();
+  });
+
+  it('calls moves.resetGame (not window.location.reload) when "Play again" is clicked', () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn(), resetGame: jest.fn() };
+
+    renderHost(
+      baseG({
+        deckIndex: STARTER_DECK.length - 1,
+        currentCard: null,
+        scores: { '0': 30, '1': 12, '2': 0 },
+      }),
+      moves
+    );
+
+    // jsdom's window.location.reload is non-configurable and can't be spied
+    // on directly, so this asserts the replacement behavior instead: the
+    // click must dispatch resetGame() rather than reloading the page.
+    fireEvent.click(screen.getByText('Play again'));
+
+    expect(moves.resetGame).toHaveBeenCalled();
   });
 });

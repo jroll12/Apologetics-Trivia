@@ -193,7 +193,7 @@ export function HostBoard({
         {!gameStarted && <LobbyScreen matchID={matchID} phonePlayers={phonePlayers} onStart={() => moves.drawCard()} />}
 
         {gameStarted && deckExhausted && (
-          <GameOverScreen phonePlayers={phonePlayers} />
+          <GameOverScreen phonePlayers={phonePlayers} onPlayAgain={() => moves.resetGame()} />
         )}
 
         {gameStarted && !deckExhausted && !G.currentCard && (
@@ -548,7 +548,13 @@ function RefereeUnavailableScreen({
   );
 }
 
-function GameOverScreen({ phonePlayers }: { phonePlayers: [string, number][] }) {
+function GameOverScreen({
+  phonePlayers,
+  onPlayAgain,
+}: {
+  phonePlayers: [string, number][];
+  onPlayAgain: () => void;
+}) {
   const [winnerId, winnerScore] = phonePlayers[0] ?? ['0', 0];
   const runnersUp = phonePlayers.slice(1);
 
@@ -571,7 +577,7 @@ function GameOverScreen({ phonePlayers }: { phonePlayers: [string, number][] }) 
           </li>
         ))}
       </ol>
-      <Button variant="primary" size="large" onClick={() => window.location.reload()}>
+      <Button variant="primary" size="large" onClick={onPlayAgain}>
         Play again
       </Button>
     </div>
