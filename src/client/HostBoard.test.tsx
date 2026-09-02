@@ -80,89 +80,213 @@ describe('HostBoard', () => {
     ]);
   });
 
-  it('falls back to the manual score field if the referee times out', async () => {
+  // --- Referee-unavailable fallback ---------------------------------------
+  //
+  // The fallback is deliberately TWO steps. The host cannot know the referee
+  // call is about to fail, so scoring the round on the first click would award
+  // whatever happens to be in the manual-score box — i.e. 0 — with no second
+  // chance. Every test below therefore asserts that the first click resolves
+  // NOTHING, and that points are only awarded after an explicit confirmation.
+
+  function renderFallbackCase(moves: { drawCard: jest.Mock; resolveRound: jest.Mock }) {
     const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    render(
+      <HostBoard
+        G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
+        moves={moves as any}
+        ctx={{} as any}
+        playerID="2"
+      />
+    );
+  }
+
+  it('does NOT resolve the round when the referee times out — it asks the host for a score instead', async () => {
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ timedOut: true }),
     } as Response);
 
-    render(
-      <HostBoard
-        G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
-        moves={moves as any}
-        ctx={{} as any}
-        playerID="2"
-      />
-    );
+    renderFallbackCase(moves);
 
-    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '6' } });
+    // No manual score typed — exactly the state a host is in when they click
+    // "Resolve Round" not knowing the referee is about to fail.
     fireEvent.click(screen.getByText('Resolve Round'));
 
-    await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText(/AI referee unavailable/i)).toBeInTheDocument()
+    );
+    // This is the regression under test: a 0-point round must NOT have been
+    // silently committed.
+    expect(moves.resolveRound).not.toHaveBeenCalled();
+
+    // The host now gets a real chance to enter a score.
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '6' } });
+    fireEvent.click(screen.getByText('Award Manual Score'));
+
     expect(moves.resolveRound).toHaveBeenCalledWith([
       { playerID: '1', score: 6, tip: 'Scored by host (AI referee unavailable).' },
     ]);
   });
 
-  it('falls back to the manual score field if the referee response is not ok (e.g. a 500 with a plain-text body)', async () => {
-    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+  it('will not award a manual score until the host has actually entered one', async () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ timedOut: true }),
+    } as Response);
+
+    renderFallbackCase(moves);
+    fireEvent.click(screen.getByText('Resolve Round'));
+
+    const awardButton = await screen.findByText('Award Manual Score');
+    expect(awardButton).toBeDisabled();
+
+    // Clicking it anyway (and with non-numeric input) must not score the round.
+    fireEvent.click(awardButton);
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: 'abc' } });
+    fireEvent.click(awardButton);
+    expect(moves.resolveRound).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '0' } });
+    expect(awardButton).not.toBeDisabled();
+    fireEvent.click(awardButton);
+    // An explicitly-typed 0 is a legitimate score — the point is that the host
+    // chose it.
+    expect(moves.resolveRound).toHaveBeenCalledWith([
+      { playerID: '1', score: 0, tip: 'Scored by host (AI referee unavailable).' },
+    ]);
+  });
+
+  it('offers the manual-score path if the referee response is not ok (e.g. a 500 with a plain-text body)', async () => {
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       json: () => Promise.reject(new SyntaxError('Unexpected token I in JSON at position 0')),
     } as unknown as Response);
 
-    render(
-      <HostBoard
-        G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
-        moves={moves as any}
-        ctx={{} as any}
-        playerID="2"
-      />
+    renderFallbackCase(moves);
+    fireEvent.click(screen.getByText('Resolve Round'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/AI referee unavailable/i)).toBeInTheDocument()
     );
+    expect(moves.resolveRound).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '9' } });
-    const resolveButton = screen.getByText('Resolve Round');
-    fireEvent.click(resolveButton);
-
-    await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('Award Manual Score'));
     expect(moves.resolveRound).toHaveBeenCalledWith([
       { playerID: '1', score: 9, tip: 'Scored by host (AI referee unavailable).' },
     ]);
-
-    // The bug: resolving must be reset to false so the button can be clicked
-    // again for a retry, instead of being left permanently disabled.
-    await waitFor(() => expect(resolveButton).not.toBeDisabled());
   });
 
-  it('falls back to the manual score field if the referee response is ok but has a malformed JSON body', async () => {
-    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+  it('offers the manual-score path if the referee response is ok but has a malformed JSON body', async () => {
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
     } as unknown as Response);
 
+    renderFallbackCase(moves);
+    fireEvent.click(screen.getByText('Resolve Round'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/AI referee unavailable/i)).toBeInTheDocument()
+    );
+    expect(moves.resolveRound).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '4' } });
+    fireEvent.click(screen.getByText('Award Manual Score'));
+    expect(moves.resolveRound).toHaveBeenCalledWith([
+      { playerID: '1', score: 4, tip: 'Scored by host (AI referee unavailable).' },
+    ]);
+  });
+
+  it('lets the host retry the AI referee instead of scoring manually', async () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ timedOut: true }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ timedOut: false, score: 7, tip: 'Cite the empty tomb.' }),
+      } as Response);
+
+    renderFallbackCase(moves);
+    fireEvent.click(screen.getByText('Resolve Round'));
+
+    const retryButton = await screen.findByText('Retry AI Referee');
+    expect(retryButton).not.toBeDisabled();
+    fireEvent.click(retryButton);
+
+    await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
+    expect(moves.resolveRound).toHaveBeenCalledWith([
+      { playerID: '1', score: 7, tip: 'Cite the empty tomb.' },
+    ]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not offer the manual-score path for QUICK_DRAW rounds, which never call the referee', async () => {
+    const quickDrawCard = STARTER_DECK.find((c) => c.type === 'QUICK_DRAW')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    const fetchSpy = jest.spyOn(global, 'fetch');
+
     render(
       <HostBoard
-        G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
+        G={baseG({ currentCard: quickDrawCard, responses: { '0': '3' } })}
         moves={moves as any}
         ctx={{} as any}
         playerID="2"
       />
     );
 
-    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '4' } });
-    const resolveButton = screen.getByText('Resolve Round');
-    fireEvent.click(resolveButton);
+    fireEvent.click(screen.getByText('Resolve Round'));
 
     await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
-    expect(moves.resolveRound).toHaveBeenCalledWith([
-      { playerID: '1', score: 4, tip: 'Scored by host (AI referee unavailable).' },
-    ]);
-    await waitFor(() => expect(resolveButton).not.toBeDisabled());
+    expect(screen.queryByText(/AI referee unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('manual score fallback')).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows a game-over message instead of Draw Card once the deck is exhausted', () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    render(
+      <HostBoard
+        G={baseG({
+          deckIndex: STARTER_DECK.length - 1,
+          currentCard: null,
+          scores: { '0': 30, '1': 12, '2': 0 },
+        })}
+        moves={moves as any}
+        ctx={{} as any}
+        playerID="2"
+      />
+    );
+
+    expect(screen.queryByText('Draw Card')).not.toBeInTheDocument();
+    expect(screen.getByText(/all the cards/i)).toBeInTheDocument();
+    // The final leaderboard is still on screen, relabelled as final.
+    expect(screen.getByText('Final Scores')).toBeInTheDocument();
+    expect(screen.getByText('Player 0: 30')).toBeInTheDocument();
+    expect(screen.getByText('Player 1: 12')).toBeInTheDocument();
+  });
+
+  it('still offers Draw Card while cards remain in the deck', () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    render(
+      <HostBoard
+        G={baseG({ deckIndex: STARTER_DECK.length - 2, currentCard: null })}
+        moves={moves as any}
+        ctx={{} as any}
+        playerID="2"
+      />
+    );
+
+    expect(screen.getByText('Draw Card')).toBeInTheDocument();
+    expect(screen.queryByText(/all the cards/i)).not.toBeInTheDocument();
   });
 
   it('does not show the host itself as a leaderboard entry', () => {
