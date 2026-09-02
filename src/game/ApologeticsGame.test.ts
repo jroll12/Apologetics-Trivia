@@ -98,4 +98,18 @@ describe('ApologeticsGame', () => {
     expect(G.scores['0']).toBe(10); // not double-credited to 20
     expect(G.lastRoundResult).toEqual([{ playerID: '0', score: 10, tip: 'Correct!' }]);
   });
+
+  it('drawCard does nothing once the deck is exhausted', () => {
+    const { client0 } = makeClients('exhausted-test');
+    for (let i = 0; i < STARTER_DECK.length; i++) {
+      client0.moves.drawCard();
+      client0.moves.resolveRound([]);
+    }
+    expect((client0.getState()!.G as GameState).deckIndex).toBe(STARTER_DECK.length - 1);
+
+    client0.moves.drawCard();
+    const after = client0.getState()!.G as GameState;
+    expect(after.deckIndex).toBe(STARTER_DECK.length - 1);
+    expect(after.currentCard).toBeNull();
+  });
 });
