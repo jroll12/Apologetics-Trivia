@@ -225,6 +225,7 @@ export function HostBoard({
             secondsRemaining={steelmanSecondsRemaining}
             resolving={resolving}
             onResolve={handleResolve}
+            onSkip={() => moves.resolveRound([])}
           />
         )}
 
@@ -235,6 +236,7 @@ export function HostBoard({
             hasResponse={G.claimedBy !== null && G.responses[G.claimedBy] !== undefined}
             resolving={resolving}
             onResolve={handleResolve}
+            onSkip={() => moves.resolveRound([])}
           />
         )}
 
@@ -334,6 +336,7 @@ function SteelmanScreen({
   secondsRemaining,
   resolving,
   onResolve,
+  onSkip,
 }: {
   prompt: string;
   claimedBy: string | null;
@@ -341,6 +344,7 @@ function SteelmanScreen({
   secondsRemaining: number;
   resolving: boolean;
   onResolve: () => void;
+  onSkip: () => void;
 }) {
   return (
     <Card padding="host" className="ap-round">
@@ -358,7 +362,12 @@ function SteelmanScreen({
             </div>
           </div>
         ) : (
-          <p className="ap-claim-meta">Waiting for someone to claim this round…</p>
+          <div>
+            <p className="ap-claim-meta">Waiting for someone to claim this round…</p>
+            <Button variant="secondary" onClick={onSkip}>
+              Skip round
+            </Button>
+          </div>
         )}
         <span className="ap-countdown-number" style={{ color: getTimerColor(secondsRemaining) }}>
           {formatMinutesSeconds(secondsRemaining)}
@@ -383,12 +392,14 @@ function ComebackScreen({
   hasResponse,
   resolving,
   onResolve,
+  onSkip,
 }: {
   prompt: string;
   claimedBy: string | null;
   hasResponse: boolean;
   resolving: boolean;
   onResolve: () => void;
+  onSkip: () => void;
 }) {
   return (
     <Card padding="host" className="ap-round">
@@ -405,7 +416,12 @@ function ComebackScreen({
           </Badge>
         </div>
       ) : (
-        <p className="ap-claim-meta">Waiting for someone to claim this round…</p>
+        <div>
+          <p className="ap-claim-meta">Waiting for someone to claim this round…</p>
+          <Button variant="secondary" onClick={onSkip}>
+            Skip round
+          </Button>
+        </div>
       )}
       <p className="ap-eyebrow">{hasResponse ? 'Response received' : 'Response pending'}</p>
       <ProgressBar progress={hasResponse ? 1 : 0} label="Response progress" />

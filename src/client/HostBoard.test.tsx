@@ -94,6 +94,26 @@ describe('HostBoard — Steelman', () => {
     expect(screen.getByText(/waiting for someone to claim/i)).toBeInTheDocument();
   });
 
+  it('shows a Skip round button while unclaimed, which resolves with no score', () => {
+    const steelmanCard = STARTER_DECK.find((c) => c.type === 'STEELMAN')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    renderHost(baseG({ deckIndex: 5, currentCard: steelmanCard }), moves);
+
+    fireEvent.click(screen.getByText('Skip round'));
+    expect(moves.resolveRound).toHaveBeenCalledWith([]);
+  });
+
+  it('hides the Skip round button once someone has claimed the round', () => {
+    const steelmanCard = STARTER_DECK.find((c) => c.type === 'STEELMAN')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    renderHost(
+      baseG({ deckIndex: 5, currentCard: steelmanCard, claimedBy: '1', responses: { '1': 'my argument' } }),
+      moves
+    );
+
+    expect(screen.queryByText('Skip round')).not.toBeInTheDocument();
+  });
+
   it('shows who claimed the round and lets the host resolve it manually', async () => {
     const steelmanCard = STARTER_DECK.find((c) => c.type === 'STEELMAN')!;
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
@@ -125,6 +145,23 @@ describe('HostBoard — Comeback', () => {
 
     expect(screen.getByText('Player 0 is responding')).toBeInTheDocument();
     expect(screen.getByText('Response pending')).toBeInTheDocument();
+  });
+
+  it('shows a Skip round button while unclaimed, which resolves with no score', () => {
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    renderHost(baseG({ deckIndex: 10, currentCard: comebackCard, claimedBy: null }), moves);
+
+    fireEvent.click(screen.getByText('Skip round'));
+    expect(moves.resolveRound).toHaveBeenCalledWith([]);
+  });
+
+  it('hides the Skip round button once someone has claimed the round', () => {
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    renderHost(baseG({ deckIndex: 10, currentCard: comebackCard, claimedBy: '0' }), moves);
+
+    expect(screen.queryByText('Skip round')).not.toBeInTheDocument();
   });
 
   it('shows a received state once the responder has submitted', () => {
