@@ -77,6 +77,17 @@ describe('ApologeticsGame', () => {
     expect(G.lastRoundResult).toEqual([{ playerID: '0', score: 10, tip: 'Correct!' }]);
   });
 
+  it("resolveRound adds to a player's existing score rather than overwriting it", () => {
+    const { client0 } = makeClients('accumulate-test');
+    client0.moves.drawCard();
+    client0.moves.resolveRound([{ playerID: '0', score: 10, tip: 'first' }]);
+    client0.moves.drawCard();
+    client0.moves.resolveRound([{ playerID: '0', score: 5, tip: 'second' }]);
+
+    const G = client0.getState()!.G as GameState;
+    expect(G.scores['0']).toBe(15);
+  });
+
   it('ignores a duplicate resolveRound dispatch when no round is active', () => {
     const { client0 } = makeClients('duplicate-resolve-test');
     client0.moves.drawCard();
