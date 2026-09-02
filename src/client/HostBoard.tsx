@@ -8,12 +8,30 @@ type RefereeApiResponse =
   | { timedOut: false; score: number; tip: string };
 
 async function fetchRefereeScore(cardId: string, response: string): Promise<RefereeApiResponse> {
-  const res = await fetch('/referee/score', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cardId, response }),
-  });
-  return res.json();
+  try {
+    const res = await fetch('/referee/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId, response }),
+    });
+
+    // The server only sends a `{ timedOut: true }` JSON body for a
+    // RefereeTimeoutError. Any other server-side failure (auth errors,
+    // unexpected exceptions, etc.) is rethrown by the server and reaches
+    // us as a non-2xx response with a plain-text body — not JSON. Treat
+    // any such failure the same as a timeout: the host can't get a usable
+    // referee answer either way, so fall back to manual scoring.
+    if (!res.ok) {
+      return { timedOut: true };
+    }
+
+    return await res.json();
+  } catch {
+    // Covers a network failure from fetch() itself, or a response body
+    // that claims to be ok but isn't valid JSON — neither should ever
+    // propagate as an uncaught rejection to the caller.
+    return { timedOut: true };
+  }
 }
 
 export function HostBoard({
@@ -28,33 +46,37 @@ export function HostBoard({
     if (!G.currentCard) return;
     setResolving(true);
 
-    if (G.currentCard.type === 'QUICK_DRAW') {
-      const results = scoreQuickDraw(G.currentCard, G.responses);
-      moves.resolveRound(results);
+    // Wrapped in try/finally so `resolving` is always reset, even if
+    // something in this path throws for a reason we didn't anticipate —
+    // the "Resolve Round" button must never be left permanently disabled.
+    try {
+      if (G.currentCard.type === 'QUICK_DRAW') {
+        const results = scoreQuickDraw(G.currentCard, G.responses);
+        moves.resolveRound(results);
+        return;
+      }
+
+      const respondingPlayerID = G.claimedBy;
+      if (!respondingPlayerID) {
+        return;
+      }
+
+      const playerResponse = G.responses[respondingPlayerID] ?? '';
+      const refereeResult = await fetchRefereeScore(G.currentCard.id, playerResponse);
+
+      const result: RoundResult = refereeResult.timedOut
+        ? {
+            playerID: respondingPlayerID,
+            score: Number(manualScore) || 0,
+            tip: 'Scored by host (AI referee unavailable).',
+          }
+        : { playerID: respondingPlayerID, score: refereeResult.score, tip: refereeResult.tip };
+
+      moves.resolveRound([result]);
+      setManualScore('');
+    } finally {
       setResolving(false);
-      return;
     }
-
-    const respondingPlayerID = G.claimedBy;
-    if (!respondingPlayerID) {
-      setResolving(false);
-      return;
-    }
-
-    const playerResponse = G.responses[respondingPlayerID] ?? '';
-    const refereeResult = await fetchRefereeScore(G.currentCard.id, playerResponse);
-
-    const result: RoundResult = refereeResult.timedOut
-      ? {
-          playerID: respondingPlayerID,
-          score: Number(manualScore) || 0,
-          tip: 'Scored by host (AI referee unavailable).',
-        }
-      : { playerID: respondingPlayerID, score: refereeResult.score, tip: refereeResult.tip };
-
-    moves.resolveRound([result]);
-    setManualScore('');
-    setResolving(false);
   };
 
   return (

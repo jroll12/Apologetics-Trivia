@@ -59,6 +59,7 @@ describe('HostBoard', () => {
     const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
     jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ timedOut: false, score: 8, tip: 'Great point.' }),
     } as Response);
 
@@ -83,6 +84,7 @@ describe('HostBoard', () => {
     const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
     jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ timedOut: true }),
     } as Response);
 
@@ -102,6 +104,65 @@ describe('HostBoard', () => {
     expect(moves.resolveRound).toHaveBeenCalledWith([
       { playerID: '1', score: 6, tip: 'Scored by host (AI referee unavailable).' },
     ]);
+  });
+
+  it('falls back to the manual score field if the referee response is not ok (e.g. a 500 with a plain-text body)', async () => {
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      json: () => Promise.reject(new SyntaxError('Unexpected token I in JSON at position 0')),
+    } as unknown as Response);
+
+    render(
+      <HostBoard
+        G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
+        moves={moves as any}
+        ctx={{} as any}
+        playerID="2"
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '9' } });
+    const resolveButton = screen.getByText('Resolve Round');
+    fireEvent.click(resolveButton);
+
+    await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
+    expect(moves.resolveRound).toHaveBeenCalledWith([
+      { playerID: '1', score: 9, tip: 'Scored by host (AI referee unavailable).' },
+    ]);
+
+    // The bug: resolving must be reset to false so the button can be clicked
+    // again for a retry, instead of being left permanently disabled.
+    await waitFor(() => expect(resolveButton).not.toBeDisabled());
+  });
+
+  it('falls back to the manual score field if the referee response is ok but has a malformed JSON body', async () => {
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+    } as unknown as Response);
+
+    render(
+      <HostBoard
+        G={baseG({ currentCard: comebackCard, claimedBy: '1', responses: { '1': 'my answer' } })}
+        moves={moves as any}
+        ctx={{} as any}
+        playerID="2"
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '4' } });
+    const resolveButton = screen.getByText('Resolve Round');
+    fireEvent.click(resolveButton);
+
+    await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
+    expect(moves.resolveRound).toHaveBeenCalledWith([
+      { playerID: '1', score: 4, tip: 'Scored by host (AI referee unavailable).' },
+    ]);
+    await waitFor(() => expect(resolveButton).not.toBeDisabled());
   });
 
   it('does not show the host itself as a leaderboard entry', () => {
