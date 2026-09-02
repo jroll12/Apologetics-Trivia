@@ -99,6 +99,13 @@ describe('ApologeticsGame', () => {
     expect(G.lastRoundResult).toEqual([{ playerID: '0', score: 10, tip: 'Correct!' }]);
   });
 
+  it('claimRound does nothing on a QUICK_DRAW round', () => {
+    const { client0, client1 } = makeClients('claim-quickdraw-test');
+    client0.moves.drawCard(); // STARTER_DECK[0] is QUICK_DRAW
+    client1.moves.claimRound();
+    expect((client0.getState()!.G as GameState).claimedBy).toBeNull();
+  });
+
   it('drawCard does nothing once the deck is exhausted', () => {
     const { client0 } = makeClients('exhausted-test');
     for (let i = 0; i < STARTER_DECK.length; i++) {
