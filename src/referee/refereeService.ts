@@ -61,6 +61,39 @@ export async function scoreResponse(
     throw new RefereeTimeoutError('Referee did not return a score');
   }
 
-  const input = toolUse.input as { score: number; tip: string };
-  return { score: input.score, tip: input.tip };
+  if (!isValidRefereeResult(toolUse.input)) {
+    // Deliberately a RefereeTimeoutError: from the host's point of view an
+    // unusable referee answer is the same situation as no answer at all, and
+    // this error type is what routes the round to the host-manual fallback
+    // (see HostBoard's `handleResolve`) instead of an HTTP 500.
+    throw new RefereeTimeoutError('Referee returned a malformed score');
+  }
+
+  return { score: toolUse.input.score, tip: toolUse.input.tip };
+}
+
+/**
+ * The Anthropic API does not hard-enforce a tool's `input_schema` at the
+ * model-output level, so `toolUse.input` is untrusted. An out-of-range or
+ * non-numeric score would corrupt the leaderboard — `ApologeticsGame`'s
+ * `resolveRound` does `(scores[id] ?? 0) + result.score`, which silently turns
+ * into string concatenation for a string score.
+ *
+ * Out-of-range scores are rejected rather than clamped: a 500 or a -3 is far
+ * more likely to mean the model malfunctioned than to be a meaningful judgment
+ * worth salvaging, and rejecting hands the round to a human.
+ */
+function isValidRefereeResult(input: unknown): input is RefereeResult {
+  if (typeof input !== 'object' || input === null) return false;
+
+  const { score, tip } = input as { score?: unknown; tip?: unknown };
+
+  if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 10) {
+    return false;
+  }
+  if (typeof tip !== 'string' || tip.trim() === '') {
+    return false;
+  }
+
+  return true;
 }
