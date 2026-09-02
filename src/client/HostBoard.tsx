@@ -271,10 +271,6 @@ function LobbyScreen({
           <p className="ap-room-code">{matchID.slice(0, 6).toUpperCase()}</p>
           <p className="ap-lobby-join">Ask the host for the game link to join.</p>
         </div>
-        <div className="ap-qr-panel" aria-hidden="true">
-          <div className="ap-qr-placeholder" />
-          <p className="ap-qr-caption">Scan to join</p>
-        </div>
       </div>
 
       <div className="ap-lobby-bottom">
