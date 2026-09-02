@@ -72,6 +72,7 @@ export const ApologeticsGame: Game<GameState> = {
     },
 
     resolveRound: ({ G }, results: RoundResult[]) => {
+      if (!G.currentCard) return;
       for (const result of results) {
         G.scores[result.playerID] = (G.scores[result.playerID] ?? 0) + result.score;
       }

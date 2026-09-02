@@ -76,4 +76,15 @@ describe('ApologeticsGame', () => {
     expect(G.currentCard).toBeNull();
     expect(G.lastRoundResult).toEqual([{ playerID: '0', score: 10, tip: 'Correct!' }]);
   });
+
+  it('ignores a duplicate resolveRound dispatch when no round is active', () => {
+    const { client0 } = makeClients('duplicate-resolve-test');
+    client0.moves.drawCard();
+    client0.moves.resolveRound([{ playerID: '0', score: 10, tip: 'Correct!' }]);
+    // A second/late dispatch for the same (now-resolved) round must not fire again.
+    client0.moves.resolveRound([{ playerID: '0', score: 10, tip: 'Correct!' }]);
+    const G = client0.getState()!.G as GameState;
+    expect(G.scores['0']).toBe(10); // not double-credited to 20
+    expect(G.lastRoundResult).toEqual([{ playerID: '0', score: 10, tip: 'Correct!' }]);
+  });
 });
