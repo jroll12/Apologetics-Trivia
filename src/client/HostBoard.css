@@ -363,8 +363,8 @@
 }
 
 .ap-stepper-button {
-  width: 36px;
-  height: 36px;
+  width: var(--tap-target-min);
+  height: var(--tap-target-min);
   border-radius: var(--radius-pill);
   background: var(--color-surface-hover);
   color: var(--color-white);
