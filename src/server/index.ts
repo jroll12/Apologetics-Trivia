@@ -1,5 +1,5 @@
 import path from 'path';
-import { Server, Origins } from 'boardgame.io/server';
+import { Server, Origins, SocketIO } from 'boardgame.io/server';
 import bodyParser from 'koa-bodyparser';
 import serveStatic from 'koa-static';
 import Anthropic from '@anthropic-ai/sdk';
@@ -69,6 +69,20 @@ export function createServer({
   const server = Server({
     games: [ApologeticsGame],
     origins: allowedOrigins(),
+    // Default socket.io behaviour starts every connection on HTTP long-
+    // polling and later upgrades to a WebSocket. Behind Render's proxy (and
+    // similar platforms), that long-poll never survives — the connection
+    // gets cut and reconnects with a brand new session every few seconds,
+    // so moves get lost mid-flight instead of ever reaching a stable
+    // connection. Going straight to `websocket` (which Render's web
+    // services support natively) skips the flaky long-poll phase entirely.
+    // The client (`src/client/index.tsx`) must request the same transport.
+    // `socketOpts`'s declared type is the full socket.io `ServerOptions`
+    // interface rather than a `Partial<>` of it, even though socket.io
+    // itself only needs the fields you actually pass. The `any` here
+    // reflects a real, valid runtime value against an overly strict
+    // ambient type, not an actual type-safety gap.
+    transport: new SocketIO({ socketOpts: { transports: ['websocket'] } as any }),
   });
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });

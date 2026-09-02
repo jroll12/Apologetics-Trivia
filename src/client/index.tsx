@@ -30,7 +30,10 @@ const { role, playerID, matchID } = parseRoleFromUrl(window.location.search);
 const GameClient = Client({
   game: ApologeticsGame,
   board: role === 'host' ? HostBoard : PlayerBoard,
-  multiplayer: SocketIO({ server: SERVER_URL }),
+  // `transports: ['websocket']` must match the server's socketOpts
+  // (src/server/index.ts) — see the comment there for why: skips the
+  // HTTP-long-polling phase that doesn't survive Render's proxy.
+  multiplayer: SocketIO({ server: SERVER_URL, socketOpts: { transports: ['websocket'] } }),
   debug: false,
 });
 
