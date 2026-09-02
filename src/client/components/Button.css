@@ -1,0 +1,49 @@
+.ap-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-pill);
+  min-height: var(--tap-target-min);
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--motion-press), border-color var(--motion-press);
+}
+
+.ap-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ap-button--large {
+  padding: var(--space-3) var(--space-8);
+  font-size: 18px;
+}
+
+.ap-button--default {
+  padding: var(--space-2) var(--space-6);
+  font-size: 16px;
+}
+
+.ap-button--primary {
+  background: var(--color-violet);
+  color: var(--color-white);
+}
+
+.ap-button--primary:not(:disabled):hover {
+  background: var(--color-violet-hover);
+}
+
+.ap-button--secondary {
+  background: var(--color-surface);
+  color: var(--color-white);
+  border: 1px solid var(--color-border);
+}
+
+.ap-button--secondary:not(:disabled):hover {
+  background: var(--color-surface-hover);
+}

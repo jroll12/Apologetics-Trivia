@@ -1,0 +1,14 @@
+.ap-progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: #333338;
+  overflow: hidden;
+}
+
+.ap-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-violet);
+  transition: width var(--motion-card);
+}

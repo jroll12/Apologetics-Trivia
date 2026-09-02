@@ -1,62 +1,211 @@
 import React, { useState } from 'react';
 import type { BoardProps } from 'boardgame.io/react';
 import { GameState } from '../game/ApologeticsGame';
+import { Avatar } from './components/Avatar';
+import { Button } from './components/Button';
+import { AnswerTile } from './components/AnswerTile';
+import { useCountdown } from './useCountdown';
+import { getTimerColor } from './timerColor';
+import { QUICK_DRAW_DURATION_SEC } from './roundDurations';
+import './PlayerBoard.css';
+
+function Header({ matchID }: { matchID: string }) {
+  return (
+    <header className="ap-player-header">
+      <span className="ap-player-wordmark">Apologist Live</span>
+      <span className="ap-player-code">{matchID.slice(0, 6).toUpperCase()}</span>
+    </header>
+  );
+}
 
 export function PlayerBoard({
   G,
   moves,
+  matchID,
   playerID,
-}: Pick<BoardProps<GameState>, 'G' | 'moves' | 'ctx' | 'playerID'>) {
+}: Pick<BoardProps<GameState>, 'G' | 'moves' | 'playerID' | 'matchID'>) {
   const [freeText, setFreeText] = useState('');
   const myID = playerID ?? '';
+  const currentCardId = G.currentCard?.id ?? null;
+
+  const quickDrawTimerKey = G.currentCard?.type === 'QUICK_DRAW' ? currentCardId : null;
+  const secondsRemaining = useCountdown(QUICK_DRAW_DURATION_SEC, quickDrawTimerKey);
+
+  const totalPhonePlayers = Object.keys(G.scores).filter((id) => id !== myID).length;
 
   if (!G.currentCard) {
-    return <p>Waiting for the host to draw a card...</p>;
+    return (
+      <div className="ap-player">
+        <Header matchID={matchID} />
+        <main className="ap-player-main ap-player-main--centered">
+          <Avatar initial={myID} size={76} />
+          <p className="ap-player-title">You're in, Player {myID}</p>
+          <p className="ap-player-body">
+            {G.deckIndex < 0
+              ? 'Waiting for the host to start the game'
+              : 'Waiting for the host to continue'}
+          </p>
+          <PulsingDots />
+          <p className="ap-player-caption">{totalPhonePlayers} players in the room</p>
+        </main>
+      </div>
+    );
   }
 
   const alreadySubmitted = G.responses[myID] !== undefined;
 
-  if (G.currentCard.type === 'QUICK_DRAW') {
-    if (alreadySubmitted) return <p>Answer submitted — waiting for other players.</p>;
-    return (
-      <div>
-        <p>{G.currentCard.prompt}</p>
-        {G.currentCard.choices?.map((choice, i) => (
-          <button key={i} onClick={() => moves.submitAnswer(String(i))}>
-            {choice}
-          </button>
+  return (
+    <div className="ap-player">
+      <Header matchID={matchID} />
+      <main className="ap-player-main">
+        {G.currentCard.type === 'QUICK_DRAW' && (
+          <QuickDrawScreen
+            prompt={G.currentCard.prompt}
+            choices={G.currentCard.choices ?? []}
+            secondsRemaining={secondsRemaining}
+            selectedIndex={alreadySubmitted ? Number(G.responses[myID]) : null}
+            onSelect={(i) => moves.submitAnswer(String(i))}
+          />
+        )}
+
+        {(G.currentCard.type === 'STEELMAN' || G.currentCard.type === 'COMEBACK') &&
+          (G.claimedBy && G.claimedBy !== myID ? (
+            <SomeoneElseAnsweringScreen respondingPlayerID={G.claimedBy} />
+          ) : (
+            <ClaimAndRespondScreen
+              prompt={G.currentCard.prompt}
+              claimed={G.claimedBy === myID}
+              submitted={alreadySubmitted}
+              freeText={freeText}
+              onChangeFreeText={setFreeText}
+              onClaim={() => moves.claimRound()}
+              onSubmit={() => moves.submitAnswer(freeText)}
+            />
+          ))}
+      </main>
+    </div>
+  );
+}
+
+function PulsingDots() {
+  return (
+    <div className="ap-pulsing-dots" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+function QuickDrawScreen({
+  prompt,
+  choices,
+  secondsRemaining,
+  selectedIndex,
+  onSelect,
+}: {
+  prompt: string;
+  choices: string[];
+  secondsRemaining: number;
+  selectedIndex: number | null;
+  onSelect: (index: number) => void;
+}) {
+  const locked = selectedIndex !== null;
+  return (
+    <div className="ap-player-round">
+      <div className="ap-player-round-top">
+        <p className="ap-eyebrow">Quick draw</p>
+        <span className="ap-player-timer" style={{ color: getTimerColor(secondsRemaining) }}>
+          {secondsRemaining}s
+        </span>
+      </div>
+      <p className="ap-player-question">{prompt}</p>
+      <div className="ap-tile-grid ap-tile-grid--player">
+        {choices.map((choice, i) => (
+          <AnswerTile
+            key={i}
+            position={i as 0 | 1 | 2 | 3}
+            label={choice}
+            size="player"
+            interactive
+            selected={selectedIndex === i}
+            locked={locked}
+            onClick={() => onSelect(i)}
+          />
         ))}
       </div>
-    );
-  }
+      {locked && (
+        <p className="ap-lock-banner">✓ Answer locked in — {choices[selectedIndex]}</p>
+      )}
+    </div>
+  );
+}
 
-  // STEELMAN / COMEBACK
-  if (G.claimedBy && G.claimedBy !== myID) {
-    return <p>Player {G.claimedBy} is answering this round.</p>;
-  }
-
-  if (!G.claimedBy) {
+function ClaimAndRespondScreen({
+  prompt,
+  claimed,
+  submitted,
+  freeText,
+  onChangeFreeText,
+  onClaim,
+  onSubmit,
+}: {
+  prompt: string;
+  claimed: boolean;
+  submitted: boolean;
+  freeText: string;
+  onChangeFreeText: (value: string) => void;
+  onClaim: () => void;
+  onSubmit: () => void;
+}) {
+  if (submitted) {
     return (
-      <div>
-        <p>{G.currentCard.prompt}</p>
-        <button onClick={() => moves.claimRound()}>I'll answer this one</button>
+      <div className="ap-player-round">
+        <p className="ap-player-question">{prompt}</p>
+        <p className="ap-player-body">Response submitted — waiting for the host.</p>
       </div>
     );
   }
 
-  if (alreadySubmitted) {
-    return <p>Response submitted — waiting for the host.</p>;
+  if (!claimed) {
+    return (
+      <div className="ap-player-round">
+        <p className="ap-player-question">{prompt}</p>
+        <Button variant="primary" size="large" className="ap-full-width" onClick={onClaim}>
+          I'll answer this one
+        </Button>
+        <p className="ap-player-caption">First to tap gets the round</p>
+      </div>
+    );
   }
 
   return (
-    <div>
-      <p>{G.currentCard.prompt}</p>
+    <div className="ap-player-round">
+      <p className="ap-player-question">{prompt}</p>
+      <label className="ap-sr-only" htmlFor="response-textarea">
+        Your response
+      </label>
       <textarea
-        aria-label="your response"
+        id="response-textarea"
+        className="ap-response-box"
         value={freeText}
-        onChange={(e) => setFreeText(e.target.value)}
+        onChange={(e) => onChangeFreeText(e.target.value)}
+        placeholder="Type your response…"
       />
-      <button onClick={() => moves.submitAnswer(freeText)}>Submit</button>
+      <Button variant="primary" size="large" className="ap-full-width" onClick={onSubmit}>
+        Submit response
+      </Button>
+    </div>
+  );
+}
+
+function SomeoneElseAnsweringScreen({ respondingPlayerID }: { respondingPlayerID: string }) {
+  return (
+    <div className="ap-player-main--centered">
+      <Avatar initial={respondingPlayerID} tone="neutral" size={64} />
+      <p className="ap-player-title">Player {respondingPlayerID} is answering this one</p>
+      <p className="ap-player-body">Sit tight, you'll see the result soon</p>
+      <PulsingDots />
     </div>
   );
 }

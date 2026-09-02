@@ -1,0 +1,20 @@
+.ap-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.ap-avatar--violet {
+  background: var(--color-violet);
+  color: var(--color-white);
+}
+
+.ap-avatar--neutral {
+  background: var(--color-surface-hover);
+  color: var(--color-secondary-text-strong);
+}

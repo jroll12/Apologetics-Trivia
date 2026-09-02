@@ -1,0 +1,98 @@
+.ap-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-2);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-4);
+  text-align: left;
+  color: var(--color-white);
+  font-family: var(--font-display);
+  transition: opacity var(--motion-reveal), border-color var(--motion-reveal);
+  border: 3px solid transparent;
+}
+
+.ap-tile--host {
+  min-height: 170px;
+}
+
+.ap-tile--player {
+  min-height: 132px;
+  cursor: pointer;
+}
+
+.ap-tile--player:disabled {
+  cursor: default;
+}
+
+.ap-tile--selected {
+  border-color: var(--color-white);
+}
+
+.ap-tile--dimmed {
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.ap-tile-label {
+  font-weight: 600;
+}
+
+.ap-tile--host .ap-tile-label {
+  font-size: 26px;
+}
+
+.ap-tile--player .ap-tile-label {
+  font-size: 15px;
+}
+
+.ap-tile-check {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--color-white);
+  color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ap-tile-shape {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.ap-tile-shape--triangle {
+  width: 0;
+  height: 0;
+  border-left: 15px solid transparent;
+  border-right: 15px solid transparent;
+  border-bottom: 26px solid var(--color-white);
+}
+
+.ap-tile-shape--diamond {
+  background: var(--color-white);
+  transform: rotate(45deg);
+  width: 20px;
+  height: 20px;
+}
+
+.ap-tile-shape--circle {
+  background: var(--color-white);
+  border-radius: var(--radius-pill);
+}
+
+.ap-tile-shape--square {
+  background: var(--color-white);
+  border-radius: var(--radius-sm);
+}
