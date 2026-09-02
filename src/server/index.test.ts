@@ -1,4 +1,5 @@
 import type { Server as HttpServer } from 'http';
+import path from 'path';
 import request from 'supertest';
 import { createServer, allowedOrigins } from './index';
 import * as refereeService from '../referee/refereeService';
@@ -108,6 +109,16 @@ describe('POST /referee/score', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 for a response longer than the length cap, without calling the referee', async () => {
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    const res = await request(baseUrl)
+      .post('/referee/score')
+      .send({ cardId: comebackCard.id, response: 'x'.repeat(2001) });
+
+    expect(res.status).toBe(400);
+    expect(refereeService.scoreResponse).not.toHaveBeenCalled();
+  });
+
   it('returns { timedOut: true } if the referee service throws RefereeTimeoutError', async () => {
     (refereeService.scoreResponse as jest.Mock).mockRejectedValue(
       new refereeService.RefereeTimeoutError('timed out')
@@ -152,5 +163,99 @@ describe('POST /referee/score', () => {
     });
 
     logSpy.mockRestore();
+  });
+});
+
+// A dedicated server/port per describe block below, rather than reusing the
+// shared `server`/`baseUrl` above — both exercise things (a custom static
+// directory, deliberately exhausting a rate limit) that must not leak into
+// or be polluted by the other tests in this file, which all share one
+// in-memory rate limiter keyed by IP and all originate from the same
+// localhost address within this test process.
+
+describe('static client serving', () => {
+  let staticServer: ReturnType<typeof createServer>;
+  let staticServers: { apiServer?: HttpServer; appServer: HttpServer };
+  let staticBaseUrl: string;
+
+  beforeAll(async () => {
+    staticServer = createServer({ staticDir: path.join(__dirname, '__fixtures__/static') });
+    staticServers = await staticServer.run(0);
+    const address = staticServers.appServer.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error(`Expected appServer to be listening on a port, got: ${JSON.stringify(address)}`);
+    }
+    staticBaseUrl = `http://localhost:${address.port}`;
+  });
+
+  afterAll(() => {
+    staticServer.kill(staticServers);
+  });
+
+  it('serves the built client for a page load at "/"', async () => {
+    const res = await request(staticBaseUrl).get('/');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('fixture index for static-serving tests');
+  });
+
+  it('still serves the built client when the request carries game query params', async () => {
+    // Every real screen in this app lives at "/" with a different query
+    // string (?match=...&role=...), not a different path — static file
+    // resolution must ignore the query string rather than 404 on it.
+    const res = await request(staticBaseUrl).get('/?match=ABC123&role=host&playerID=2');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('fixture index for static-serving tests');
+  });
+
+  it('still lets an unmatched, non-file request reach boardgame.io\'s own lobby route', async () => {
+    // The real regression this guards against: static-file middleware that
+    // doesn't fall through to `next()` for a non-file path would shadow
+    // every other route on the server, not just serve 404s for real assets.
+    const res = await request(staticBaseUrl)
+      .post('/games/apologetics/create')
+      .send({ numPlayers: 2 });
+
+    expect(res.status).toBe(200);
+    expect(typeof res.body.matchID).toBe('string');
+  });
+});
+
+describe('POST /referee/score rate limiting', () => {
+  let limitedServer: ReturnType<typeof createServer>;
+  let limitedServers: { apiServer?: HttpServer; appServer: HttpServer };
+  let limitedBaseUrl: string;
+
+  beforeAll(async () => {
+    limitedServer = createServer();
+    limitedServers = await limitedServer.run(0);
+    const address = limitedServers.appServer.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error(`Expected appServer to be listening on a port, got: ${JSON.stringify(address)}`);
+    }
+    limitedBaseUrl = `http://localhost:${address.port}`;
+  });
+
+  afterAll(() => {
+    limitedServer.kill(limitedServers);
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it('rejects with 429 once one IP exceeds 10 requests within a minute', async () => {
+    (refereeService.scoreResponse as jest.Mock).mockResolvedValue({ score: 5, tip: 'tip' });
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+
+    for (let i = 0; i < 10; i++) {
+      const res = await request(limitedBaseUrl)
+        .post('/referee/score')
+        .send({ cardId: comebackCard.id, response: `answer ${i}` });
+      expect(res.status).toBe(200);
+    }
+
+    const eleventh = await request(limitedBaseUrl)
+      .post('/referee/score')
+      .send({ cardId: comebackCard.id, response: 'one too many' });
+
+    expect(eleventh.status).toBe(429);
   });
 });

@@ -6,12 +6,17 @@
     "test": "jest",
     "dev:server": "ts-node src/server/index.ts",
     "dev:client": "vite",
-    "create-match": "ts-node scripts/create-match.ts"
+    "create-match": "ts-node scripts/create-match.ts",
+    "build:server": "tsc",
+    "build:client": "vite build",
+    "build": "npm run build:server && npm run build:client",
+    "start": "node dist/src/server/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
     "boardgame.io": "^0.50.2",
     "koa-bodyparser": "^4.4.1",
+    "koa-static": "^5.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -20,6 +25,7 @@
     "@testing-library/react": "^16.3.3",
     "@types/jest": "^30.0.0",
     "@types/koa-bodyparser": "^4.3.13",
+    "@types/koa-static": "^4.0.4",
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",

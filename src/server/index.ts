@@ -1,11 +1,25 @@
+import path from 'path';
 import { Server, Origins } from 'boardgame.io/server';
 import bodyParser from 'koa-bodyparser';
+import serveStatic from 'koa-static';
 import Anthropic from '@anthropic-ai/sdk';
 import { ApologeticsGame } from '../game/ApologeticsGame';
 import { STARTER_DECK } from '../game/cards';
 import { scoreResponse, RefereeTimeoutError } from '../referee/refereeService';
+import { createRateLimiter } from './rateLimit';
 
 const PORT = Number(process.env.PORT) || 8000;
+
+// A generous cap for a spoken/typed apologetics response — bounds the
+// request body size (and therefore Anthropic token cost) an internet-facing
+// deployment is exposed to, without getting in the way of any real answer.
+const MAX_RESPONSE_LENGTH = 2000;
+
+// Bounds worst-case Anthropic spend from a scripted abuser once this server
+// is reachable over the internet. 10/minute per IP is far more than any
+// real player calls this endpoint during a game night (once per round they
+// respond to, at most), while capping a runaway script's blast radius.
+const REFEREE_RATE_LIMIT = { windowMs: 60_000, max: 10 };
 
 function escapeForRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -39,13 +53,39 @@ export function allowedOrigins(hostLanIp = process.env.HOST_LAN_IP): (string | R
   return origins;
 }
 
-export function createServer() {
+export interface CreateServerOptions {
+  /** Directory of the built client (`vite build` output) to serve as static
+   * files. Defaults to `dist-client` under the process's working directory
+   * — resolved at call time via `process.cwd()`, not `__dirname`, so it
+   * doesn't depend on how deep the compiled server output is nested.
+   * Overridable so tests can point it at a small fixture directory instead
+   * of requiring a real client build to exist. */
+  staticDir?: string;
+}
+
+export function createServer({
+  staticDir = path.join(process.cwd(), 'dist-client'),
+}: CreateServerOptions = {}) {
   const server = Server({
     games: [ApologeticsGame],
     origins: allowedOrigins(),
   });
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Serves the built client (index.html, JS/CSS bundles) for any request
+  // that doesn't match a real file — which, in this app, means every page
+  // load, since every screen lives at `/` with different query strings
+  // (`?match=...&role=...`), not different paths. Mounted before `.run()`
+  // ever wires up boardgame.io's own cors/secret/router middleware (see the
+  // comment below on route-mount ordering), but that's fine here: unlike
+  // that earlier bug, `koa-static` calls `next()` for any request that
+  // doesn't resolve to a real file, so requests for `/games/*`, `/referee/*`,
+  // and `/socket.io/*` correctly fall through to boardgame.io's own routing
+  // rather than ever being short-circuited by this middleware.
+  server.app.use(serveStatic(staticDir));
+
+  const refereeRateLimiter = createRateLimiter(REFEREE_RATE_LIMIT);
 
   // Body parsing is attached directly to this route (not globally via
   // `server.app.use(bodyParser())`) to match how boardgame.io itself scopes
@@ -57,13 +97,19 @@ export function createServer() {
   // middleware, which then threw `stream is not readable` and turned every
   // lobby request into an HTTP 500. Scoping the parser to this route only
   // avoids touching the stream for any request this route doesn't handle.
-  server.router.post('/referee/score', bodyParser(), async (ctx) => {
+  server.router.post('/referee/score', refereeRateLimiter, bodyParser(), async (ctx) => {
     const { cardId, response } = ctx.request.body as { cardId: string; response: string };
     const card = STARTER_DECK.find((c) => c.id === cardId);
 
     if (!card) {
       ctx.status = 400;
       ctx.body = { error: 'unknown card id' };
+      return;
+    }
+
+    if (typeof response !== 'string' || response.length > MAX_RESPONSE_LENGTH) {
+      ctx.status = 400;
+      ctx.body = { error: `response must be a string of at most ${MAX_RESPONSE_LENGTH} characters` };
       return;
     }
 

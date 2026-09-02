@@ -112,3 +112,64 @@ grep referee_score playtest.log
 | Phone can't load the page at all | Wrong IP, different Wi-Fi network, client isolation, or a firewall blocking ports 5173/8000 |
 | Page loads but the game never connects | `VITE_SERVER_URL` / `HOST_LAN_IP` not exported before starting the client and server |
 | Browser console shows a CORS error | Server was started without `HOST_LAN_IP` (or with a different value than the URLs use) |
+
+## Voice input
+
+On the Steelman/Comeback response screen, a microphone button next to the
+text box lets a player speak their answer instead of typing it (uses the
+browser's built-in Web Speech API — no new account or API key needed). It
+only appears on browsers that support it (Chrome, Edge, Safari; not
+Firefox), and it requires a secure context — it works over `localhost`, but
+**will not work yet over the current `http://<LAN-IP>` phone setup**, only
+once the game is deployed with real HTTPS (see below). Typing always works
+as a fallback either way.
+
+## Deploying so anyone can play over the internet
+
+Local/LAN play (above) needs everyone on the same Wi-Fi. To let remote
+friends join, deploy the server somewhere it runs continuously with a real
+HTTPS domain. This repo is already set up for **[Render](https://render.com)**
+(a `render.yaml` blueprint is included), which has a free tier for exactly
+this kind of small service.
+
+**What's already done:** `npm run build` compiles the server and builds the
+client into `dist-client/`; the server serves that built client itself
+(`npm start` runs one process for both), so there's only one thing to
+deploy. The `/referee/score` endpoint is rate-limited (10 requests/minute
+per IP) and caps response length (2000 characters), since once this is
+public, anyone with the URL could otherwise run up your Anthropic bill.
+
+**Steps you'll need to do yourself** (creating accounts and pushing to a
+remote aren't things I'll do without you driving them):
+
+1. **Push this repo to GitHub** (or GitLab) — Render deploys from a connected
+   git repository. If you don't already have a remote:
+   ```bash
+   gh repo create apologist-game --private --source=. --push
+   ```
+   (or create an empty repo on github.com and `git remote add origin <url> && git push -u origin main`).
+2. **Create a free Render account** at [render.com](https://render.com) and
+   connect your GitHub account.
+3. **New → Blueprint**, pick this repo. Render reads `render.yaml`
+   automatically and proposes the service.
+4. When prompted for the `ANTHROPIC_API_KEY` environment variable, paste in
+   your real key — Render stores it as a secret, it never goes in the repo.
+5. Deploy. Render gives you a URL like `https://apologist-game.onrender.com`.
+
+Once it's live, create matches against the deployed server instead of your
+own machine:
+
+```bash
+HOST_LAN_IP=apologist-game.onrender.com npm run create-match 4
+```
+
+(`HOST_LAN_IP` is really just "the host phones should connect to" — a real
+domain works the same way a LAN IP does.) Share the printed player links
+with your remote friends directly (text, Discord, whatever) instead of
+relying on the same-Wi-Fi QR flow.
+
+**Known limitation on the free tier:** Render's free web services spin down
+after 15 minutes of no traffic and take ~30–50 seconds to wake back up on
+the next request — the first player to open a link after a quiet period
+will see a blank/loading page briefly before it connects. Fine for an
+occasional game night; upgrading to a paid plan removes it if that matters.
