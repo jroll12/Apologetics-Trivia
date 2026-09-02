@@ -24,6 +24,7 @@ const GameClient = Client({
   game: ApologeticsGame,
   board: role === 'host' ? HostBoard : PlayerBoard,
   multiplayer: SocketIO({ server: SERVER_URL }),
+  debug: false,
 });
 
 const root = createRoot(document.getElementById('root')!);

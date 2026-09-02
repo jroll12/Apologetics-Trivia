@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { BoardProps } from 'boardgame.io/react';
 import { GameState } from '../game/ApologeticsGame';
 import { Avatar } from './components/Avatar';
 import { Button } from './components/Button';
 import { AnswerTile } from './components/AnswerTile';
+import { MicrophoneIcon } from './components/icons';
 import { useCountdown } from './useCountdown';
+import { useSpeechToText } from './useSpeechToText';
 import { getTimerColor } from './timerColor';
 import { QUICK_DRAW_DURATION_SEC } from './roundDurations';
 import './PlayerBoard.css';
@@ -185,16 +187,61 @@ function ClaimAndRespondScreen({
       <label className="ap-sr-only" htmlFor="response-textarea">
         Your response
       </label>
-      <textarea
-        id="response-textarea"
-        className="ap-response-box"
-        value={freeText}
-        onChange={(e) => onChangeFreeText(e.target.value)}
-        placeholder="Type your response…"
-      />
+      <div className="ap-response-box-wrap">
+        <textarea
+          id="response-textarea"
+          className="ap-response-box"
+          value={freeText}
+          onChange={(e) => onChangeFreeText(e.target.value)}
+          placeholder="Type your response…"
+        />
+        <VoiceInputButton freeText={freeText} onChangeFreeText={onChangeFreeText} />
+      </div>
       <Button variant="primary" size="large" className="ap-full-width" onClick={onSubmit}>
         Submit response
       </Button>
+    </div>
+  );
+}
+
+function VoiceInputButton({
+  freeText,
+  onChangeFreeText,
+}: {
+  freeText: string;
+  onChangeFreeText: (value: string) => void;
+}) {
+  // Captured the moment recording starts, so a live transcript is appended
+  // after whatever the player already typed rather than replacing it.
+  const baseTextRef = useRef('');
+
+  const { supported, listening, start, stop } = useSpeechToText((sessionTranscript) => {
+    const base = baseTextRef.current.trimEnd();
+    onChangeFreeText(base ? `${base} ${sessionTranscript}` : sessionTranscript);
+  });
+
+  if (!supported) return null;
+
+  const handleClick = () => {
+    if (listening) {
+      stop();
+      return;
+    }
+    baseTextRef.current = freeText;
+    start();
+  };
+
+  return (
+    <div className="ap-voice-input">
+      <button
+        type="button"
+        className={`ap-voice-button ${listening ? 'ap-voice-button--listening' : ''}`}
+        onClick={handleClick}
+        aria-label={listening ? 'Stop voice input' : 'Speak your response'}
+      >
+        <MicrophoneIcon width={20} height={20} />
+      </button>
+      {listening && <span className="ap-voice-status">Listening…</span>}
     </div>
   );
 }

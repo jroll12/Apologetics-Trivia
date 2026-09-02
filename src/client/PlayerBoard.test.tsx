@@ -1,7 +1,7 @@
 /** @jest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PlayerBoard } from './PlayerBoard';
 import { GameState } from '../game/ApologeticsGame';
 import { STARTER_DECK } from '../game/cards';
@@ -105,5 +105,89 @@ describe('PlayerBoard — Steelman / Comeback claim then respond', () => {
 
     expect(screen.getByText('Player 1 is answering this one')).toBeInTheDocument();
     expect(screen.queryByText("I'll answer this one")).not.toBeInTheDocument();
+  });
+});
+
+describe('PlayerBoard — voice input', () => {
+  class FakeSpeechRecognition {
+    lang = '';
+    interimResults = false;
+    continuous = false;
+    onresult: ((event: any) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onend: (() => void) | null = null;
+    start = jest.fn();
+    stop = jest.fn();
+  }
+
+  let lastInstance: FakeSpeechRecognition | null = null;
+  const originalSpeechRecognition = (window as any).SpeechRecognition;
+
+  afterEach(() => {
+    (window as any).SpeechRecognition = originalSpeechRecognition;
+    lastInstance = null;
+  });
+
+  function renderClaimedComeback(moves: { submitAnswer: jest.Mock; claimRound: jest.Mock }) {
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+    renderPlayer(baseG({ currentCard: comebackCard, claimedBy: '0' }), moves);
+  }
+
+  it('hides the mic button on a browser with no SpeechRecognition support', () => {
+    delete (window as any).SpeechRecognition;
+    delete (window as any).webkitSpeechRecognition;
+    const moves = { submitAnswer: jest.fn(), claimRound: jest.fn() };
+    renderClaimedComeback(moves);
+
+    expect(screen.queryByLabelText('Speak your response')).not.toBeInTheDocument();
+  });
+
+  it('fills in the response box with the recognized transcript', () => {
+    (window as any).SpeechRecognition = jest.fn(function (this: FakeSpeechRecognition) {
+      Object.assign(this, new FakeSpeechRecognition());
+      lastInstance = this;
+    });
+    const moves = { submitAnswer: jest.fn(), claimRound: jest.fn() };
+    renderClaimedComeback(moves);
+
+    fireEvent.click(screen.getByLabelText('Speak your response'));
+    expect(screen.getByLabelText('Stop voice input')).toBeInTheDocument();
+
+    act(() => {
+      lastInstance!.onresult?.({ results: [[{ transcript: 'because free will requires choice' }]] });
+    });
+
+    expect(screen.getByLabelText('Your response')).toHaveValue('because free will requires choice');
+  });
+
+  it('appends the transcript after text the player already typed', () => {
+    (window as any).SpeechRecognition = jest.fn(function (this: FakeSpeechRecognition) {
+      Object.assign(this, new FakeSpeechRecognition());
+      lastInstance = this;
+    });
+    const moves = { submitAnswer: jest.fn(), claimRound: jest.fn() };
+    renderClaimedComeback(moves);
+
+    fireEvent.change(screen.getByLabelText('Your response'), { target: { value: 'First, ' } });
+    fireEvent.click(screen.getByLabelText('Speak your response'));
+    act(() => {
+      lastInstance!.onresult?.({ results: [[{ transcript: 'consider the empty tomb' }]] });
+    });
+
+    expect(screen.getByLabelText('Your response')).toHaveValue('First, consider the empty tomb');
+  });
+
+  it('stops listening when the mic button is tapped again', () => {
+    (window as any).SpeechRecognition = jest.fn(function (this: FakeSpeechRecognition) {
+      Object.assign(this, new FakeSpeechRecognition());
+      lastInstance = this;
+    });
+    const moves = { submitAnswer: jest.fn(), claimRound: jest.fn() };
+    renderClaimedComeback(moves);
+
+    fireEvent.click(screen.getByLabelText('Speak your response'));
+    fireEvent.click(screen.getByLabelText('Stop voice input'));
+
+    expect(lastInstance!.stop).toHaveBeenCalled();
   });
 });
