@@ -229,6 +229,49 @@ describe('HostBoard', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('does not let the host award a manual score while a referee retry is still in flight', async () => {
+    const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };
+    let resolveRetry: (value: Response) => void;
+    const retryPromise = new Promise<Response>((resolve) => {
+      resolveRetry = resolve;
+    });
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ timedOut: true }),
+      } as Response)
+      .mockReturnValueOnce(retryPromise);
+
+    renderFallbackCase(moves);
+    fireEvent.click(screen.getByText('Resolve Round'));
+
+    const retryButton = await screen.findByText('Retry AI Referee');
+    fireEvent.click(retryButton);
+
+    // The retry is now in flight — its fetch promise hasn't settled yet.
+    // A host who doesn't realize that and types a score anyway must not be
+    // able to award it while the retry could still land and resolve the
+    // same round a second time.
+    fireEvent.change(screen.getByLabelText('manual score fallback'), { target: { value: '6' } });
+    const awardButton = screen.getByText('Award Manual Score');
+    await waitFor(() => expect(awardButton).toBeDisabled());
+    fireEvent.click(awardButton);
+    expect(moves.resolveRound).not.toHaveBeenCalled();
+
+    // Now let the in-flight retry succeed.
+    resolveRetry!({
+      ok: true,
+      json: () => Promise.resolve({ timedOut: false, score: 7, tip: 'Cite the empty tomb.' }),
+    } as Response);
+
+    await waitFor(() => expect(moves.resolveRound).toHaveBeenCalled());
+    expect(moves.resolveRound).toHaveBeenCalledTimes(1);
+    expect(moves.resolveRound).toHaveBeenCalledWith([
+      { playerID: '1', score: 7, tip: 'Cite the empty tomb.' },
+    ]);
+  });
+
   it('does not offer the manual-score path for QUICK_DRAW rounds, which never call the referee', async () => {
     const quickDrawCard = STARTER_DECK.find((c) => c.type === 'QUICK_DRAW')!;
     const moves = { drawCard: jest.fn(), resolveRound: jest.fn() };

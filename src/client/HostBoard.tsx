@@ -174,7 +174,7 @@ export function HostBoard({
                 onChange={(e) => setManualScore(e.target.value)}
                 placeholder={`Score 0-10 for player ${refereeUnavailableFor}`}
               />
-              <button onClick={handleAwardManualScore} disabled={!manualScoreIsValid}>
+              <button onClick={handleAwardManualScore} disabled={!manualScoreIsValid || resolving}>
                 Award Manual Score
               </button>
               <button onClick={handleResolve} disabled={resolving}>
