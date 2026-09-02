@@ -7,10 +7,42 @@ import { scoreResponse, RefereeTimeoutError } from '../referee/refereeService';
 
 const PORT = Number(process.env.PORT) || 8000;
 
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Origins allowed to talk to this server (socket.io transport + lobby/referee
+ * router).
+ *
+ * boardgame.io's `Origins.LOCALHOST` is only `/localhost:\d+/`, so a phone
+ * loading the client over the host machine's LAN IP (e.g.
+ * `http://192.168.1.42:5173`) is not an allowed origin — exactly the setup the
+ * README tells hosts to use. Widen the allow-list to loopback plus, when the
+ * host exports `HOST_LAN_IP`, that one specific address on any port.
+ *
+ * This is deliberately scoped to development / local playtests: the app has no
+ * production deployment target yet, and nothing here opens the server to
+ * arbitrary origins — an unset `HOST_LAN_IP` leaves behaviour exactly as it was.
+ */
+export function allowedOrigins(hostLanIp = process.env.HOST_LAN_IP): (string | RegExp)[] {
+  const origins: (string | RegExp)[] = [
+    Origins.LOCALHOST,
+    // `Origins.LOCALHOST` does not cover the numeric loopback address.
+    /^https?:\/\/127\.0\.0\.1:\d+$/,
+  ];
+
+  if (hostLanIp) {
+    origins.push(new RegExp(`^https?://${escapeForRegExp(hostLanIp)}(:\\d+)?$`));
+  }
+
+  return origins;
+}
+
 export function createServer() {
   const server = Server({
     games: [ApologeticsGame],
-    origins: [Origins.LOCALHOST],
+    origins: allowedOrigins(),
   });
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -37,6 +69,23 @@ export function createServer() {
 
     try {
       const result = await scoreResponse(anthropic, card, response);
+
+      // Playtest observability: the spec's rollout criterion is "zero
+      // brand-guardrail violations observed in referee output across the
+      // playtest sample," but the tip is overwritten in the host UI on the
+      // next round. One JSON line per scored response makes a whole session
+      // reviewable afterwards from the server's stdout / log file. Nothing
+      // fancier is warranted yet — no database, no rotation.
+      console.log(
+        JSON.stringify({
+          event: 'referee_score',
+          cardId,
+          response,
+          score: result.score,
+          tip: result.tip,
+        })
+      );
+
       ctx.body = { timedOut: false, ...result };
     } catch (err) {
       if (err instanceof RefereeTimeoutError) {

@@ -7,7 +7,16 @@ import { HostBoard } from './HostBoard';
 import { PlayerBoard } from './PlayerBoard';
 import { parseRoleFromUrl } from './url';
 
-const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL ?? 'http://localhost:8000';
+// This value is baked into the bundle every phone loads, so it must not be a
+// hard-coded `localhost` — on a phone, `localhost` means the phone itself, not
+// the host's laptop. Prefer the explicit `VITE_SERVER_URL` that
+// `npm run create-match` prints, and otherwise derive the server host from the
+// page's own hostname so the LAN case still works if that export was
+// forgotten. On the same-machine playtest this still resolves to
+// `http://localhost:8000`, exactly as before.
+const SERVER_URL =
+  (import.meta as any).env?.VITE_SERVER_URL ??
+  `${window.location.protocol}//${window.location.hostname}:8000`;
 
 const { role, playerID, matchID } = parseRoleFromUrl(window.location.search);
 
