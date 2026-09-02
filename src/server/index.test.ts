@@ -259,3 +259,58 @@ describe('POST /referee/score rate limiting', () => {
     expect(eleventh.status).toBe(429);
   });
 });
+
+// Dedicated server/port again, for the same reason as the block above: this
+// exercises the rate limiter to exhaustion and must not share state (or a
+// port) with any other describe block in this file.
+describe('POST /referee/score rate limiting behind a reverse proxy', () => {
+  let proxyServer: ReturnType<typeof createServer>;
+  let proxyServers: { apiServer?: HttpServer; appServer: HttpServer };
+  let proxyBaseUrl: string;
+
+  beforeAll(async () => {
+    proxyServer = createServer();
+    proxyServers = await proxyServer.run(0);
+    const address = proxyServers.appServer.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error(`Expected appServer to be listening on a port, got: ${JSON.stringify(address)}`);
+    }
+    proxyBaseUrl = `http://localhost:${address.port}`;
+  });
+
+  afterAll(() => {
+    proxyServer.kill(proxyServers);
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it('tracks distinct X-Forwarded-For IPs as independent rate-limit buckets', async () => {
+    (refereeService.scoreResponse as jest.Mock).mockResolvedValue({ score: 5, tip: 'tip' });
+    const comebackCard = STARTER_DECK.find((c) => c.type === 'COMEBACK')!;
+
+    // Exhaust the limit for one forwarded IP.
+    for (let i = 0; i < 10; i++) {
+      const res = await request(proxyBaseUrl)
+        .post('/referee/score')
+        .set('X-Forwarded-For', '1.2.3.4')
+        .send({ cardId: comebackCard.id, response: `answer ${i}` });
+      expect(res.status).toBe(200);
+    }
+
+    const eleventhFromFirstIp = await request(proxyBaseUrl)
+      .post('/referee/score')
+      .set('X-Forwarded-For', '1.2.3.4')
+      .send({ cardId: comebackCard.id, response: 'one too many' });
+    expect(eleventhFromFirstIp.status).toBe(429);
+
+    // A request forwarded from a different IP must be unaffected — proof
+    // `ctx.ip` is genuinely reading the header (with `server.app.proxy =
+    // true` set), not just that the flag exists while `ctx.ip` still
+    // collapses every request onto the same bucket.
+    const fromSecondIp = await request(proxyBaseUrl)
+      .post('/referee/score')
+      .set('X-Forwarded-For', '5.6.7.8')
+      .send({ cardId: comebackCard.id, response: 'a fresh IP' });
+    expect(fromSecondIp.status).toBe(200);
+  });
+});

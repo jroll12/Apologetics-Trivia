@@ -85,6 +85,13 @@ export function createServer({
     transport: new SocketIO({ socketOpts: { transports: ['websocket'] } as any }),
   });
 
+  // Render puts this server behind a reverse proxy, so the real client
+  // address only arrives via `X-Forwarded-For`/`X-Forwarded-Proto`. Koa
+  // ignores those headers unless told to trust the proxy, which without this
+  // flag makes `ctx.ip` (and therefore the per-IP referee rate limiter below)
+  // resolve to the proxy's own address for every request.
+  server.app.proxy = true;
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   // Serves the built client (index.html, JS/CSS bundles) for any request
