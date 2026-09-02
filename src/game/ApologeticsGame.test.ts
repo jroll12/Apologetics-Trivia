@@ -67,6 +67,15 @@ describe('ApologeticsGame', () => {
     });
   });
 
+  it('rejects submitAnswer on a STEELMAN round before anyone has claimed it', () => {
+    const { client0 } = makeClients('submit-before-claim-test');
+    const card = drawUntilType(client0, 'STEELMAN');
+    expect(card?.type).toBe('STEELMAN');
+
+    client0.moves.submitAnswer('an argument');
+    expect((client0.getState()!.G as GameState).responses).toEqual({});
+  });
+
   it('resolveRound adds scores, records the result, and clears the current card', () => {
     const { client0 } = makeClients('resolve-test');
     client0.moves.drawCard();
