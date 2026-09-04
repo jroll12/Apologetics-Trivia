@@ -1,13 +1,60 @@
 const SERVER_PORT = Number(process.env.PORT) || 8000;
 const CLIENT_PORT = Number(process.env.CLIENT_PORT) || 5173;
 
-// Where *this script* reaches the game server. It always runs on the host
-// machine, so localhost is correct here regardless of HOST_LAN_IP.
-const SERVER_URL = process.env.SERVER_URL ?? `http://localhost:${SERVER_PORT}`;
+// A deployed target (e.g. Render) serves the built client and the game
+// server from one HTTPS origin — there's no separate dev client port to
+// point at, and this script must create the match on that same origin, not
+// on the local dev server. Set this instead of HOST_LAN_IP when creating a
+// match against a real deployment; see README.md.
+const PUBLIC_SERVER_URL = process.env.PUBLIC_SERVER_URL?.replace(/\/+$/, '');
+
+// Where *this script* reaches the game server for local/LAN play. It always
+// runs on the host machine, so localhost is correct here regardless of
+// HOST_LAN_IP (that only affects the URLs handed to phones, not this
+// script's own request).
+const SERVER_URL = PUBLIC_SERVER_URL ?? process.env.SERVER_URL ?? `http://localhost:${SERVER_PORT}`;
 
 interface Args {
   phonePlayerCount: number;
   hostLanIp?: string;
+}
+
+interface MatchUrls {
+  host: string;
+  players: string[];
+}
+
+export function buildMatchUrls({
+  matchID,
+  phonePlayerCount,
+  hostPlayerID,
+  publicServerUrl,
+  hostLanIp,
+}: {
+  matchID: string;
+  phonePlayerCount: number;
+  hostPlayerID: string;
+  publicServerUrl?: string;
+  hostLanIp?: string;
+}): MatchUrls {
+  if (publicServerUrl) {
+    return {
+      host: `${publicServerUrl}/?match=${matchID}&role=host&playerID=${hostPlayerID}`,
+      players: Array.from(
+        { length: phonePlayerCount },
+        (_, i) => `${publicServerUrl}/?match=${matchID}&role=player&playerID=${i}`
+      ),
+    };
+  }
+
+  const clientHost = hostLanIp ?? 'localhost';
+  return {
+    host: `http://${clientHost}:${CLIENT_PORT}/?match=${matchID}&role=host&playerID=${hostPlayerID}`,
+    players: Array.from(
+      { length: phonePlayerCount },
+      (_, i) => `http://${clientHost}:${CLIENT_PORT}/?match=${matchID}&role=player&playerID=${i}`
+    ),
+  };
 }
 
 export function parseArgs(argv: string[]): Args {
@@ -40,9 +87,10 @@ async function main() {
 
   // The host machine's LAN IP (or hostname) that phones should use. `localhost`
   // on a phone means the *phone*, not the host's laptop, so URLs printed with
-  // `localhost` only work in browser tabs on this same machine.
+  // `localhost` only work in browser tabs on this same machine. Ignored
+  // entirely once PUBLIC_SERVER_URL is set — a deployed origin needs neither
+  // this nor a separate client port.
   const hostLanIp = process.env.HOST_LAN_IP || hostLanIpFlag;
-  const clientHost = hostLanIp ?? 'localhost';
 
   const numPlayers = phonePlayerCount + 1;
   const hostPlayerID = String(phonePlayerCount);
@@ -61,7 +109,10 @@ async function main() {
   console.log(`Match created for ${phonePlayerCount} players.`);
   console.log('');
 
-  if (hostLanIp) {
+  if (PUBLIC_SERVER_URL) {
+    console.log(`Using deployed server: ${PUBLIC_SERVER_URL}`);
+    console.log('');
+  } else if (hostLanIp) {
     console.log(`Using host address: ${hostLanIp}`);
     console.log('Both dev processes must be started with the matching environment:');
     console.log(`  server:  HOST_LAN_IP=${hostLanIp} npm run dev:server`);
@@ -77,14 +128,15 @@ async function main() {
     console.log('');
   }
 
-  console.log(
-    `Host screen: http://${clientHost}:${CLIENT_PORT}/?match=${matchID}&role=host&playerID=${hostPlayerID}`
-  );
-  for (let i = 0; i < phonePlayerCount; i++) {
-    console.log(
-      `Player ${i}: http://${clientHost}:${CLIENT_PORT}/?match=${matchID}&role=player&playerID=${i}`
-    );
-  }
+  const urls = buildMatchUrls({
+    matchID,
+    phonePlayerCount,
+    hostPlayerID,
+    publicServerUrl: PUBLIC_SERVER_URL,
+    hostLanIp,
+  });
+  console.log(`Host screen: ${urls.host}`);
+  urls.players.forEach((url, i) => console.log(`Player ${i}: ${url}`));
 }
 
 if (require.main === module) {

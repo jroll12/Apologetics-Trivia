@@ -157,16 +157,17 @@ remote aren't things I'll do without you driving them):
 5. Deploy. Render gives you a URL like `https://apologist-game.onrender.com`.
 
 Once it's live, create matches against the deployed server instead of your
-own machine:
+own machine, using `PUBLIC_SERVER_URL` (not `HOST_LAN_IP` — a deployed
+service serves the client and server from one HTTPS origin with no separate
+port, unlike the LAN dev setup above):
 
 ```bash
-HOST_LAN_IP=apologist-game.onrender.com npm run create-match 4
+PUBLIC_SERVER_URL=https://apologist-game.onrender.com npm run create-match 4
 ```
 
-(`HOST_LAN_IP` is really just "the host phones should connect to" — a real
-domain works the same way a LAN IP does.) Share the printed player links
-with your remote friends directly (text, Discord, whatever) instead of
-relying on the same-Wi-Fi QR flow.
+This both creates the match *on that deployed server* and prints links
+pointing at it. Share the printed player links with your remote friends
+directly (text, Discord, whatever).
 
 **Known limitation on the free tier:** Render's free web services spin down
 after 15 minutes of no traffic and take ~30–50 seconds to wake back up on
